@@ -1,0 +1,12 @@
+streamlit
+openai
+langchain
+langchain-community
+langchain-openai
+openpyxl
+google-cloud-storage
+
+# gcsfs==2024.6.1
+# st-files-connection
+# gcloud
+# setuptools
