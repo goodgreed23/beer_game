@@ -17,7 +17,15 @@ from google.oauth2.service_account import Credentials
 #from models import MODEL_CONFIGS
 from utils.utils import response_generator
 from prompt_utils import build_beergame_prompt
+from utils.prompt_utils import build_beergame_prompt
 
+selected_mode = mode_label_to_config[selected_mode_label]
+player_role = st.session_state["player_role_by_mode"][selected_mode]  # or selected_role
+
+system_prompt = build_beergame_prompt(
+    mode=MODEL_CONFIGS[selected_mode]["mode"],
+    player_role=player_role,
+)
 
 
 st.set_page_config(
