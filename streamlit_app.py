@@ -24,11 +24,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-MODEL_SELECTED = "gpt-4o"
+MODEL_SELECTED = "gpt-5-mini"
 
-st.title("Beer Game Assistant (OM)")
+st.title("Beer Game Assistant")
 st.write(
-    "Ask strategy and concept questions in qualitative mode, or ask calculation questions in quantitative mode."
+    "..."
 )
 
 openai_api_key = st.secrets["OPENAI_API_KEY"]
@@ -70,6 +70,25 @@ system_prompt = MODEL_CONFIGS[selected_mode]["prompt"]
 user_pid = st.sidebar.text_input("Study ID / Team ID")
 autosave_enabled = st.sidebar.checkbox("Autosave to GCP", value=True)
 
+# --- Player Role (Beer Game position) ---
+ROLE_OPTIONS = ["Retailer", "Wholesaler", "Distributor", "Factory"]
+
+selected_role = st.sidebar.selectbox(
+    "Your Role (Beer Game)",
+    ROLE_OPTIONS,
+    index=0,
+    help="Used to tailor advice (what you observe/control differs by role).",
+)
+
+if "player_role_by_mode" not in st.session_state:
+    st.session_state["player_role_by_mode"] = {
+        "BeerGameQualitative": selected_role,
+        "BeerGameQuantitative": selected_role,
+    }
+
+# keep per-mode role (so switching modes can keep its own role if you want)
+st.session_state["player_role_by_mode"][selected_mode] = selected_role
+
 if "start_time_by_mode" not in st.session_state:
     now = datetime.now()
     st.session_state["start_time_by_mode"] = {
@@ -83,7 +102,7 @@ if "messages_by_mode" not in st.session_state:
             {
                 "role": "assistant",
                 "content": (
-                    "I am your Beer Game qualitative coach. Share your round context or decisions, and I will help "
+                    "I am your Beer Game coach. Share your round context or decisions, and I will help "
                     "you reason about delays, backlog, and the bullwhip effect."
                 ),
             }
@@ -92,7 +111,7 @@ if "messages_by_mode" not in st.session_state:
             {
                 "role": "assistant",
                 "content": (
-                    "I am your Beer Game quantitative coach. Send the numbers you have, and I will walk through the "
+                    "I am your Beer Game coach. Send the numbers you have, and I will walk through the "
                     "formulas and calculations step by step."
                 ),
             }
@@ -102,7 +121,7 @@ if "messages_by_mode" not in st.session_state:
 messages = st.session_state["messages_by_mode"][selected_mode]
 
 
-def save_conversation_to_gcp(messages_to_save, mode_key, pid):
+def save_conversation_to_gcp(messages_to_save, mode_key, pid, player_role):
     if not pid:
         return None, "missing_pid"
     try:
@@ -114,6 +133,7 @@ def save_conversation_to_gcp(messages_to_save, mode_key, pid):
         metadata_rows = pd.DataFrame(
             [
                 {"role": "Mode", "content": mode_key},
+                {"role": "Player Role", "content": player_role},
                 {"role": "Start Time", "content": start_time},
                 {"role": "End Time", "content": end_time},
                 {"role": "Duration", "content": duration},
@@ -161,7 +181,9 @@ if st.sidebar.button("Clear Current Mode Chat"):
     st.session_state["start_time_by_mode"][selected_mode] = datetime.now()
 
 if st.sidebar.button("Save Conversation to GCP"):
-    saved_file, save_error = save_conversation_to_gcp(messages, selected_mode, user_pid)
+    player_role = st.session_state["player_role_by_mode"][selected_mode]
+    saved_file, save_error = save_conversation_to_gcp(messages, selected_mode, user_pid, player_role)
+    
     if save_error == "missing_pid":
         st.sidebar.error("Enter Study ID / Team ID first.")
     elif save_error:
@@ -186,15 +208,21 @@ if user_input := st.chat_input("Ask a Beer Game question..."):
             history_messages.append(AIMessage(content=msg["content"]))
 
     prompt_template = ChatPromptTemplate.from_messages(
-        [
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{input}"),
-        ]
-    )
-    chain = prompt_template | llm
-    llm_response = chain.invoke({"history": history_messages, "input": user_input})
-    assistant_text = llm_response.content
+    [
+        ("system", system_prompt + "\n\nUser's Beer Game role: {player_role}\n"
+                  "Tailor the guidance to this role's information/constraints."),
+        MessagesPlaceholder(variable_name="history"),
+        ("human", "{input}"),
+    ]
+)
+
+player_role = st.session_state["player_role_by_mode"][selected_mode]
+
+chain = prompt_template | llm
+llm_response = chain.invoke(
+    {"history": history_messages, "input": user_input, "player_role": player_role}
+)
+assistant_text = llm_response.content
 
     with st.chat_message("assistant"):
         st.write_stream(response_generator(response=assistant_text))
@@ -202,7 +230,8 @@ if user_input := st.chat_input("Ask a Beer Game question..."):
     messages.append({"role": "assistant", "content": assistant_text})
 
     if autosave_enabled:
-        saved_file, save_error = save_conversation_to_gcp(messages, selected_mode, user_pid)
+        player_role = st.session_state["player_role_by_mode"][selected_mode]
+        saved_file, save_error = save_conversation_to_gcp(messages, selected_mode, user_pid, player_role)
         if save_error == "missing_pid":
             st.sidebar.warning("Autosave is on. Enter Study ID / Team ID to enable uploads.")
         elif save_error:
