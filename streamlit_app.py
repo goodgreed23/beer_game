@@ -14,8 +14,11 @@ except ImportError:
 from google.cloud import storage
 from google.oauth2.service_account import Credentials
 
-from models import MODEL_CONFIGS
+#from models import MODEL_CONFIGS
 from utils.utils import response_generator
+from prompt_utils import build_beergame_prompt
+
+
 
 st.set_page_config(
     page_title="Beer Game Assistant (OM)",
