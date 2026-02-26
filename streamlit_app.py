@@ -235,10 +235,10 @@ llm_response = chain.invoke(
 )
 assistant_text = llm_response.content
 
-    with st.chat_message("assistant"):
-        st.write_stream(response_generator(response=assistant_text))
+with st.chat_message("assistant"):
+    st.write_stream(response_generator(response=assistant_text))
 
-    messages.append({"role": "assistant", "content": assistant_text})
+messages.append({"role": "assistant", "content": assistant_text})
 
     if autosave_enabled:
         player_role = st.session_state["player_role_by_mode"][selected_mode]
